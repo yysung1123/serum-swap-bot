@@ -14,9 +14,9 @@ import { setProgramIds } from './utils/ids.js';
 
 import { swap, getHoldingAmounts } from './utils/pools.js';
 
-require('dotenv').config();
+import { delay } from './utils/delay.js';
 
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+require('dotenv').config();
 
 const env = 'mainnet-beta';
 const url = 'https://api.mainnet-beta.solana.com';
@@ -52,16 +52,30 @@ async function getTokenAccountBalance(
 ) {
     let res = 0;
     while (res <= expectation * 0.9) {
-        res = parseInt((await connection.getTokenAccountBalance(account, 'confirmed')).value.amount);
+        for (;;) {
+            try {
+                res = parseInt((await connection.getTokenAccountBalance(account, 'confirmed')).value.amount);
+                break;
+            } catch (e) {
+                console.log(e);
+            }
+        }
         console.log(res, expectation * 0.9);
-        delay(100);
+        await delay(100);
     }
     return res;
 }
 
 async function Main() {
     setProgramIds(env)
-    await cache.initCaches(connection, owner.publicKey);
+    for (;;) {
+        try {
+            await cache.initCaches(connection, owner.publicKey);
+            break;
+        } catch {
+
+        }
+    }
     /*
     const balance = await connection.getBalance(owner.publicKey);
     console.log(balance);
@@ -82,7 +96,7 @@ async function Main() {
     let usdc_balance;
 
     while (true) {
-        let tradePairs
+        let tradePairs;
         while (true) {
             try {
                 let usdcPairs = await Promise.all(tokenSymbols.map(async (item) => {
@@ -122,9 +136,9 @@ async function Main() {
         const maxProfit = profit.reduce(function(prev, current) {
             return (prev[2] > current[2]) ? prev : current
         })
-        if (maxProfit[2] > tokenAmount * 1.002) {
+        if (maxProfit[2] > tokenAmount * 1.005) {
             console.log(maxProfit);
-            usdc_balance = await getTokenAccountBalance(connection, usdc_account, true);
+            usdc_balance = await getTokenAccountBalance(connection, usdc_account, tokenAmount);
             console.log(usdc_balance);
             let changedAccount;
             let changedTokenAmount;
@@ -133,45 +147,42 @@ async function Main() {
                 // usdc -> wusdt -> token -> usdc;
                 let token = maxProfit[0];
                 expectation = caculateProfit(tokenAmount, [tradePairs.get("USDC/wUSDT")]);
-                await swap(connection, owner, tokenAmount, expectation, 0.95, "USDC", "wUSDT");
-                // https://github.com/solana-labs/solana-web3.js/blob/f0ce1784634934b4ee2b2d26fbe79bb17b47d0b1/test/system-program.test.ts#L343
-                // Wait for blockhash to advance
-                await delay(600);
+                await swap(connection, owner, tokenAmount, expectation, 0.9, "USDC", "wUSDT");
                 changedAccount = await cache.getTokenAccountBySymbol("wUSDT");
                 changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
+                await delay(1000);
                 expectation = caculateProfit(changedTokenAmount, [amountSwap(tradePairs.get(`${token}/wUSDT`))]);
                 await swap(connection, owner, changedTokenAmount, expectation, 0.8, "wUSDT", token);
-                // Wait for blockhash to advance
-                await delay(600);
                 changedAccount = await cache.getTokenAccountBySymbol(token);
                 changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
-                console.log(changedTokenAmount);
+                // Wait for blockhash to advance
+                await delay(1000);
                 expectation = caculateProfit(changedTokenAmount, [tradePairs.get(`${token}/USDC`)]);
                 await swap(connection, owner, changedTokenAmount, expectation, 0.8, token, "USDC");
             } else {
                 // usdc -> token -> wusdt -> usdc;
                 let token = maxProfit[0];
                 expectation = caculateProfit(tokenAmount, [amountSwap(tradePairs.get(`${token}/USDC`))]);
-                await swap(connection, owner, tokenAmount, expectation, 0.95, "USDC", token);
-                // Wait for blockhash to advance
-                await delay(600);
+                await swap(connection, owner, tokenAmount, expectation, 0.9, "USDC", token);
                 changedAccount = await cache.getTokenAccountBySymbol(token);
                 changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
+                // Wait for blockhash to advance
+                await delay(1000);
                 expectation = caculateProfit(changedTokenAmount, [tradePairs.get(`${token}/wUSDT`)]);
                 await swap(connection, owner, changedTokenAmount, expectation, 0.8, token, "wUSDT");
-                // Wait for blockhash to advance
-                await delay(600);
                 changedAccount = await cache.getTokenAccountBySymbol("wUSDT");
                 changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
+                // Wait for blockhash to advance
+                await delay(1000);
                 expectation = caculateProfit(changedTokenAmount, [amountSwap(tradePairs.get("USDC/wUSDT"))])
                 await swap(connection, owner, changedTokenAmount, expectation, 0.8, "wUSDT", "USDC");
             }
 
-            usdc_balance = await getTokenAccountBalance(connection, usdc_account, true);
+            usdc_balance = await getTokenAccountBalance(connection, usdc_account, tokenAmount);
             console.log(usdc_balance);
         } else {
             console.log("sleep start");
-            await delay(5 * 1000);
+            await delay(2 * 1000);
             console.log("sleep end");
         }
     }

@@ -296,6 +296,10 @@ export const stableCoinSymbols = ["USDC", "wUSDT"];
 
 export const cache = {
     initCaches: async (connection, publicKey) => {
+        tokenAccountsCache.clear();
+        tokenMintsCache.clear();
+        tokenNamesCache.clear();
+        swapPoolsCache.clear();
         tokenAccountsCache = await getAccounts(connection, publicKey);
         tokenMintsCache = await getTokens(connection);
         tokenNamesCache = await getTokenNames(connection);

@@ -13,6 +13,8 @@ import {
 
 import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getOrCreateAssociatedAccountInfo } from '@solana/spl-token';
 
+import { delay } from './delay.js';
+
 export const isLatest = (swap) => {
     return swap.data.length === TokenSwapLayout.span;
 };
@@ -131,10 +133,17 @@ export const swap = async (
         )
     );
 
-    let tx = await sendTransaction(
-        connection,
-        wallet,
-        instructions.concat(cleanupInstructions),
-        signers,
-    );
+    for (;;) {
+        try {
+            let tx = await sendTransaction(
+                connection,
+                wallet,
+                instructions.concat(cleanupInstructions),
+                signers,
+            );
+            break;
+        } catch (e) {
+            await delay(2000);
+        }
+    }
 }
