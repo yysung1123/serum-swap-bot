@@ -134,10 +134,12 @@ async function getAccounts(connection, publicKey) {
             return { publicKey, parsed: parseTokenAccountData(accountInfo.data) };
         });
     let tokenList = (await new TokenListProvider().resolve()).filterByClusterSlug('mainnet-beta').getList();
-    return new Map(tokenAccounts.map(({ publicKey, parsed }) => {
+    const m = new Map(tokenAccounts.map(({ publicKey, parsed }) => {
         let symbol = tokenList.find(t => t.address === parsed.mint.toBase58())?.symbol;
         return [symbol, publicKey];
     }));
+    m.set("SOL", publicKey);
+    return m;
 };
 
 async function getTokens(connection, publicKey) {
@@ -246,6 +248,7 @@ async function getSwapPools(connection) {
         if (m.has(item[0])) {
             if (mAmount[item[0]] < item[2]) {
                 m.set(item[0], item[1]);
+                mAmount[item[0]] = item[2];
             }
         } else {
             m.set(item[0], item[1]);

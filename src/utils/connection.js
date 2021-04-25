@@ -12,7 +12,7 @@ async function confirmTransaction (
   confirmations,
 ) {
   const start = Date.now();
-  const WAIT_TIMEOUT_MS = 60 * 1000;
+  const WAIT_TIMEOUT_MS = 20 * 1000;
 
   let statusResponse = await connection.getSignatureStatus(signature);
   for (;;) {
@@ -33,7 +33,7 @@ async function confirmTransaction (
 
     // Sleep for approximately one slot
     await delay(MS_PER_SLOT);
-    statusResponse = await this.getSignatureStatus(signature);
+    statusResponse = await connection.getSignatureStatus(signature);
   }
 
   return statusResponse;
@@ -45,7 +45,7 @@ export const sendTransaction = async (
     wallet,
     instructions,
     signers,
-    awaitConfirmation = false
+    awaitConfirmation = true
   ) => {
     let transaction = new Transaction();
     instructions.forEach((instruction) => transaction.add(instruction));
@@ -67,11 +67,20 @@ export const sendTransaction = async (
 
     if (awaitConfirmation) {
       //await connection.getConfirmedTransaction(txid, options && options.commitment);
-      const status = (
-        await confirmTransaction(connection, txid, options && options.commitment)
-      ).value;
+      let status;
+      for (;;) {
+        try {
+          status = (
+            await confirmTransaction(connection, txid, 5)
+          ).value;
+          break;
+        } catch (e) {
+          //console.log(e);
+        }
+      }
 
-      if (status.err) {
+      console.log(status);
+      if (status === null || status.err) {
 
         throw new Error(
           `Raw transaction ${txid} failed (${JSON.stringify(status)})`

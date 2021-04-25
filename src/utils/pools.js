@@ -133,17 +133,10 @@ export const swap = async (
         )
     );
 
-    for (;;) {
-        try {
-            let tx = await sendTransaction(
-                connection,
-                wallet,
-                instructions.concat(cleanupInstructions),
-                signers,
-            );
-            break;
-        } catch (e) {
-            await delay(2000);
-        }
-    }
+    let tx = await sendTransaction(
+        connection,
+        wallet,
+        instructions.concat(cleanupInstructions),
+        signers,
+    );
 }
