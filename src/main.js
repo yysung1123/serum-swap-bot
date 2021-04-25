@@ -21,6 +21,8 @@ require('dotenv').config();
 const env = 'mainnet-beta';
 const url = 'https://api.mainnet-beta.solana.com';
 const mnemonic = process.env.MNEMONIC;
+const tokenAmount = 80 * (10 ** 6);
+const minimumProfit = 1.003;
 
 const connection = new Connection(url);
 
@@ -78,35 +80,39 @@ async function calcAmountAndSwap(
     tradePairs,
     tokenAAmountLimit = 0,
 ) {
-    let tokenBExpectationAmount;
-    let pair;
-    if (!rev) {
-        pair = tradePairs.get(`${tokenA}/${tokenB}`);
-    } else {
-        pair = tradePairs.get(`${tokenB}/${tokenA}`);
+    let tokenBExpectationAmount = 0;
+    let tokenBAmount = 0;
+    const pair = tradePairs.get(`${tokenA}/${tokenB}`);
+    if (rev) {
+        [tokenA, tokenB] = [tokenB, tokenA];
     }
     const tokenAAccount = await cache.getTokenAccountBySymbol(tokenA);
+    const tokenBAccount = await cache.getTokenAccountBySymbol(tokenB);
     for (;;) {
         try {
-            const tokenAAmount = await getTokenAccountBalance(connection, tokenAAccount, tokenAExpectationAmount);
+            let tokenAAmount = await getTokenAccountBalance(connection, tokenAAccount, tokenAExpectationAmount);
             if (tokenAAmountLimit > 0) {
-                tokenAAmount = max(tokenAAmount, tokenAAmountLimit);
+                tokenAAmount = Math.min(tokenAAmount, tokenAAmountLimit);
             }
             await delay(400);
+            tokenBExpectationAmount = 0;
             tokenBExpectationAmount = caculateProfit(tokenAAmount, (!rev ? [pair] : [amountSwap(pair)]));
             await swap(connection, owner, tokenAAmount, tokenBExpectationAmount, 0.9, tokenA, tokenB);
+            tokenBAmount = await getTokenAccountBalance(connection, tokenBAccount, tokenBExpectationAmount);
             break;
         } catch (e) {
             console.log(e);
-            let tokenBAmount = await getTokenAccountBalance(connection, tokenBAccmount, 0);
+            await delay(1000);
+            /*
+            tokenBAmount = await getTokenAccountBalance(connection, tokenBAccount, 1);
             // Transaction success
             if (tokenBAmount >= tokenBExpectationAmount * 0.9) {
                 break;
             }
-            await delay(500);
+            */
         }
     }
-    return tokenBExpectationAmount;
+    return tokenBAmount;
 }
 
 async function Main() {
@@ -161,7 +167,6 @@ async function Main() {
             }
         }
         let profit = [];
-        const tokenAmount = 80 * (10 ** 6);
         for (let token of tokenSymbols) {
             // usdc -> wusdt -> token -> usdc;
             let amounts = []
@@ -180,106 +185,24 @@ async function Main() {
         const maxProfit = profit.reduce(function(prev, current) {
             return (prev[2] > current[2]) ? prev : current
         })
-        if (maxProfit[2] > tokenAmount * 1.002) {
+        if (maxProfit[2] > tokenAmount * minimumProfit) {
             console.log(maxProfit);
             usdc_balance = await getTokenAccountBalance(connection, usdc_account, usdc_balance);
             console.log(usdc_balance);
-            let changedAccount;
-            let changedTokenAmount;
-            let expectation, newExpectation;
+            const usdcAmountCheck = usdc_balance - tokenAmount;
+            let expectation;
             if (!maxProfit[1]) {
                 // usdc -> wusdt -> token -> usdc;
                 let token = maxProfit[0];
-                for (;;) {
-                    try {
-                        expectation = caculateProfit(tokenAmount, [tradePairs.get("USDC/wUSDT")]);
-                        await swap(connection, owner, tokenAmount, expectation, 0.9, "USDC", "wUSDT");
-                        break;
-                    } catch (e) {
-                        changedAccount = await cache.getTokenAccountBySymbol("wUSDT");
-
-                        console.log(e);
-                        await delay(1000);
-                    }
-                }
-                changedAccount = await cache.getTokenAccountBySymbol("wUSDT");
-                for (;;) {
-                    try {
-                        changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
-                        await delay(400);
-                        newExpectation = caculateProfit(changedTokenAmount, [amountSwap(tradePairs.get(`${token}/wUSDT`))]);
-                        await swap(connection, owner, changedTokenAmount, newExpectation, 0.8, "wUSDT", token);
-                        expectation = newExpectation;
-                        break;
-                    } catch (e) {
-                        console.log(e);
-                        await delay(1000);
-                    }
-                }
-                changedAccount = await cache.getTokenAccountBySymbol(token);
-                for (;;) {
-                    try {
-                        changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
-                        if (token == "SOL") {
-                            changedTokenAmount -= reserved_sol_balance;
-                        }
-                        // Wait for blockhash to advance
-                        await delay(400);
-                        newExpectation = caculateProfit(changedTokenAmount, [tradePairs.get(`${token}/USDC`)]);
-                        await swap(connection, owner, changedTokenAmount, newExpectation, 0.8, token, "USDC");
-                        expectation = newExpectation;
-                        break;
-                    } catch (e) {
-                        console.log(e);
-                        await delay(1000);
-                    }
-                }
+                expectation = await calcAmountAndSwap(connection, owner, "USDC", "wUSDT", false, tokenAmount, tradePairs, tokenAmount);
+                expectation = await calcAmountAndSwap(connection, owner, token, "wUSDT", true, expectation, tradePairs);
+                expectation = await calcAmountAndSwap(connection, owner, token, "USDC", false, expectation, tradePairs);
             } else {
                 // usdc -> token -> wusdt -> usdc;
                 let token = maxProfit[0];
-                for (;;) {
-                    try {
-                        expectation = caculateProfit(tokenAmount, [amountSwap(tradePairs.get(`${token}/USDC`))]);
-                        await swap(connection, owner, tokenAmount, expectation, 0.9, "USDC", token);
-                        break;
-                    } catch (e) {
-                        console.log(e);
-                        await delay(1000);
-                    }
-                }
-                changedAccount = await cache.getTokenAccountBySymbol(token);
-                for (;;) {
-                    try {
-                        changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
-                        if (token == "SOL") {
-                            changedTokenAmount -= reserved_sol_balance;
-                        }
-                        // Wait for blockhash to advance
-                        await delay(400);
-                        newExpectation = caculateProfit(changedTokenAmount, [tradePairs.get(`${token}/wUSDT`)]);
-                        await swap(connection, owner, changedTokenAmount, newExpectation, 0.8, token, "wUSDT");
-                        expectation = newExpectation
-                        break;
-                    } catch (e) {
-                        console.log(e);
-                        await delay(1000);
-                    }
-                }
-                changedAccount = await cache.getTokenAccountBySymbol("wUSDT");
-                for (;;) {
-                    try {
-                        changedTokenAmount = await getTokenAccountBalance(connection, changedAccount, expectation);
-                        // Wait for blockhash to advance
-                        await delay(400);
-                        newExpectation = caculateProfit(changedTokenAmount, [amountSwap(tradePairs.get("USDC/wUSDT"))])
-                        await swap(connection, owner, changedTokenAmount, newExpectation, 0.8, "wUSDT", "USDC");
-                        expectation = newExpectation;
-                        break;
-                    } catch (e) {
-                        console.log(e);
-                        await delay(1000);
-                    }
-                }
+                expectation = await calcAmountAndSwap(connection, owner, token, "USDC", true, tokenAmount, tradePairs, tokenAmount);
+                expectation = await calcAmountAndSwap(connection, owner, token, "wUSDT", false, expectation, tradePairs);
+                expectation = await calcAmountAndSwap(connection, owner, "USDC", "wUSDT", true, expectation, tradePairs);
             }
 
             usdc_balance = await getTokenAccountBalance(connection, usdc_account, usdc_balance);

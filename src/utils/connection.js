@@ -14,7 +14,7 @@ async function confirmTransaction (
   const start = Date.now();
   const WAIT_TIMEOUT_MS = 20 * 1000;
 
-  let statusResponse = await connection.getSignatureStatus(signature);
+  let statusResponse = await connection.getSignatureStatus(signature, {searchTransactionHistory: true});
   for (;;) {
     const status = statusResponse.value;
     if (status) {
@@ -33,7 +33,7 @@ async function confirmTransaction (
 
     // Sleep for approximately one slot
     await delay(MS_PER_SLOT);
-    statusResponse = await connection.getSignatureStatus(signature);
+    statusResponse = await connection.getSignatureStatus(signature, {searchTransactionHistory: true});
   }
 
   return statusResponse;
