@@ -21,8 +21,8 @@ require('dotenv').config();
 const env = 'mainnet-beta';
 const url = 'https://api.mainnet-beta.solana.com';
 const mnemonic = process.env.MNEMONIC;
-const tokenAmount = 80 * (10 ** 6);
-const minimumProfit = 1.003;
+const tokenAmount = parseInt(process.env.USDC_AMOUNT) * 1000000;
+const minimumProfit = parseFloat(process.env.MINIMUM_PROFIT);
 
 const connection = new Connection(url);
 
