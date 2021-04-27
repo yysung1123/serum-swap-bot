@@ -29,6 +29,7 @@
     "buffer-layout": "^1.2.0",
     "dotenv": "^8.2.0",
     "ed25519-hd-key": "^1.2.0",
+    "node-telegram-bot-api": "^0.52.0",
     "tweetnacl": "^1.0.3"
   }
 }

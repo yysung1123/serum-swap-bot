@@ -18,6 +18,8 @@ import { delay } from './utils/delay.js';
 
 require('dotenv').config();
 
+const TelegramBot = require('node-telegram-bot-api');
+
 const env = 'mainnet-beta';
 const url = 'https://api.mainnet-beta.solana.com';
 const mnemonic = process.env.MNEMONIC;
@@ -115,7 +117,24 @@ async function calcAmountAndSwap(
     return tokenBAmount;
 }
 
+async function sendMessage(
+    bot,
+    chatId,
+    text,
+) {
+    if (bot != null && chatId != null) {
+        await bot.sendMessage(chatId, text).catch()
+    }
+}
+
 async function Main() {
+    let bot = null;
+    let chatId = null;
+    if (process.env.TOKEN != null && process.env.CHAT_ID != null) {
+        bot = new TelegramBot(process.env.TOKEN);
+        chatId = process.env.CHAT_ID;
+    }
+
     setProgramIds(env)
     for (;;) {
         try {
@@ -189,6 +208,7 @@ async function Main() {
             console.log(maxProfit);
             usdc_balance = await getTokenAccountBalance(connection, usdc_account, usdc_balance);
             console.log(usdc_balance);
+            sendMessage(bot, chatId, `${maxProfit}\n${usdc_balance / 1000000}`);
             const usdcAmountCheck = usdc_balance - tokenAmount;
             let expectation;
             if (!maxProfit[1]) {
@@ -205,8 +225,10 @@ async function Main() {
                 expectation = await calcAmountAndSwap(connection, owner, "USDC", "wUSDT", true, expectation, tradePairs);
             }
 
-            usdc_balance = await getTokenAccountBalance(connection, usdc_account, usdc_balance);
-            console.log(usdc_balance);
+            let new_usdc_balance = await getTokenAccountBalance(connection, usdc_account, usdc_balance);
+            console.log(new_usdc_balance);
+            sendMessage(bot, chatId, `Profit: ${(new_usdc_balance - usdc_balance) / 1000000}`);
+            usdc_balance = new_usdc_balance;
         } else {
             console.log("sleep start");
             await delay(2 * 1000);
