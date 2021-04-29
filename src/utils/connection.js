@@ -31,8 +31,7 @@ async function confirmTransaction(
             break;
         }
 
-        // Sleep for approximately one slot
-        await delay(MS_PER_SLOT);
+        await delay(100);
         statusResponse = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
     }
 
@@ -68,9 +67,9 @@ export const sendTransaction = async (
     if (awaitConfirmation) {
         //await connection.getConfirmedTransaction(txid, options && options.commitment);
         let res, status, status_null_count = 0;
-        for (; ;) {
+        for (;;) {
             try {
-                res = await confirmTransaction(connection, txid, 5);
+                res = await confirmTransaction(connection, txid, 2);
                 status = res.value;
                 if (status === null && status_null_count < 2) {
                     console.log(`status null ${status_null_count}`);

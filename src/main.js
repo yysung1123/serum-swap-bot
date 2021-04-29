@@ -52,24 +52,27 @@ function caculateProfit(
 async function getTokenAccountBalance(
     connection,
     account,
-    expectation = 0,
+    slot_id,
     commitment = 'confirmed',
 ) {
-    let res = 0;
-    while (res <= expectation * 0.9) {
+    let amount = 0;
+    let current_slot_id = -1;
+    while (current_slot_id < slot_id) {
         for (;;) {
             try {
-                res = parseInt((await connection.getTokenAccountBalance(account, commitment)).value.amount);
+                const res = await connection.getTokenAccountBalance(account, commitment);
+                amount = parseInt(res.value.amount);
+                current_slot_id = res.context.slot;
                 break;
             } catch (e) {
                 console.log(e);
             }
         }
-        process.stdout.write(`${res} ${expectation * 0.9}\r`);
-        await delay(100);
+        process.stdout.write(`${amount} ${current_slot_id} ${slot_id}\r`);
+        await delay(400);
     }
-    console.log(res, expectation * 0.9);
-    return res;
+    console.log(amount);
+    return [amount, current_slot_id];
 }
 
 async function calcAmountAndSwap(
@@ -78,43 +81,27 @@ async function calcAmountAndSwap(
     tokenA,
     tokenB,
     rev,
-    tokenAExpectationAmount,
+    tokenAAmount,
     tradePairs,
-    tokenAAmountLimit = 0,
+    slot_id,
 ) {
-    let tokenBExpectationAmount = 0;
-    let tokenBAmount = 0;
+    let tokenBAmount;
     const pair = tradePairs.get(`${tokenA}/${tokenB}`);
     if (rev) {
         [tokenA, tokenB] = [tokenB, tokenA];
     }
-    const tokenAAccount = await cache.getTokenAccountBySymbol(tokenA);
-    const tokenBAccount = await cache.getTokenAccountBySymbol(tokenB);
     for (;;) {
         try {
-            let tokenAAmount = await getTokenAccountBalance(connection, tokenAAccount, tokenAExpectationAmount);
-            if (tokenAAmountLimit > 0) {
-                tokenAAmount = Math.min(tokenAAmount, tokenAAmountLimit);
-            }
-            await delay(400);
-            tokenBExpectationAmount = 0;
-            tokenBExpectationAmount = caculateProfit(tokenAAmount, (!rev ? [pair] : [amountSwap(pair)]));
-            await swap(connection, owner, tokenAAmount, tokenBExpectationAmount, 0.9, tokenA, tokenB);
-            tokenBAmount = await getTokenAccountBalance(connection, tokenBAccount, tokenBExpectationAmount);
+            const tokenBExpectationAmount = caculateProfit(tokenAAmount, (!rev ? [pair] : [amountSwap(pair)]));
+            [tokenBAmount, slot_id] = await swap(connection, owner, tokenAAmount, tokenBExpectationAmount, 0.9, tokenA, tokenB);
             break;
         } catch (e) {
             console.log(e);
-            await delay(1000);
-            /*
-            tokenBAmount = await getTokenAccountBalance(connection, tokenBAccount, 1);
-            // Transaction success
-            if (tokenBAmount >= tokenBExpectationAmount * 0.9) {
-                break;
-            }
-            */
+            await delay(400);
         }
+        retry_count += 1;
     }
-    return tokenBAmount;
+    return [tokenBAmount, slot_id];
 }
 
 async function sendMessage(
@@ -162,6 +149,7 @@ async function Main() {
     */
     let usdc_account = await cache.getTokenAccountBySymbol("USDC");
     let usdc_balance;
+    let slot_id = 0;
     const reserved_sol_balance = 10000000;
 
     while (true) {
@@ -206,29 +194,28 @@ async function Main() {
         })
         if (maxProfit[2] > tokenAmount * minimumProfit) {
             console.log(maxProfit);
-            usdc_balance = await getTokenAccountBalance(connection, usdc_account, usdc_balance);
+            console.log(new Date().toLocaleString());
+            [usdc_balance, slot_id] = await getTokenAccountBalance(connection, usdc_account, slot_id);
             console.log(usdc_balance);
             sendMessage(bot, chatId, `${maxProfit}\n${usdc_balance / 1000000}`);
-            const usdcAmountCheck = usdc_balance - tokenAmount;
-            let expectation;
+            let swappedAmount;
+            let token = maxProfit[0];
             if (!maxProfit[1]) {
                 // usdc -> wusdt -> token -> usdc;
-                let token = maxProfit[0];
-                expectation = await calcAmountAndSwap(connection, owner, "USDC", "wUSDT", false, tokenAmount, tradePairs, tokenAmount);
-                expectation = await calcAmountAndSwap(connection, owner, token, "wUSDT", true, expectation, tradePairs);
-                expectation = await calcAmountAndSwap(connection, owner, token, "USDC", false, expectation, tradePairs);
+                [swappedAmount, slot_id] = await calcAmountAndSwap(connection, owner, "USDC", "wUSDT", false, tokenAmount, tradePairs, slot_id);
+                [swappedAmount, slot_id] = await calcAmountAndSwap(connection, owner, token, "wUSDT", true, swappedAmount, tradePairs, slot_id);
+                [swappedAmount, slot_id] = await calcAmountAndSwap(connection, owner, token, "USDC", false, swappedAmount, tradePairs, slot_id);
             } else {
                 // usdc -> token -> wusdt -> usdc;
-                let token = maxProfit[0];
-                expectation = await calcAmountAndSwap(connection, owner, token, "USDC", true, tokenAmount, tradePairs, tokenAmount);
-                expectation = await calcAmountAndSwap(connection, owner, token, "wUSDT", false, expectation, tradePairs);
-                expectation = await calcAmountAndSwap(connection, owner, "USDC", "wUSDT", true, expectation, tradePairs);
+                [swappedAmount, slot_id] = await calcAmountAndSwap(connection, owner, token, "USDC", true, tokenAmount, tradePairs, slot_id);
+                [swappedAmount, slot_id] = await calcAmountAndSwap(connection, owner, token, "wUSDT", false, swappedAmount, tradePairs, slot_id);
+                [swappedAmount, slot_id] = await calcAmountAndSwap(connection, owner, "USDC", "wUSDT", true, swappedAmount, tradePairs, slot_id);
             }
 
-            let new_usdc_balance = await getTokenAccountBalance(connection, usdc_account, usdc_balance);
-            console.log(new_usdc_balance);
-            sendMessage(bot, chatId, `Profit: ${(new_usdc_balance - usdc_balance) / 1000000}`);
-            usdc_balance = new_usdc_balance;
+            console.log(swappedAmount);
+            console.log(new Date().toLocaleString());
+            sendMessage(bot, chatId, `Profit: ${(swappedAmount - usdc_balance) / 1000000}`);
+            usdc_balance = swappedAmount;
         } else {
             console.log("sleep start");
             await delay(2 * 1000);

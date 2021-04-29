@@ -139,4 +139,20 @@ export const swap = async (
         instructions.concat(cleanupInstructions),
         signers,
     );
+
+    let res;
+    for (;;) {
+        try {
+            res = await connection.getConfirmedTransaction(tx, "confirmed");
+            if (res !== null) {
+                break;
+            }
+        } catch (e) {
+        }
+        await delay(400);
+    }
+
+    const tokenBAmount = parseInt(res.meta.postTokenBalances[3].uiTokenAmount.amount);
+    const slot_id = res.slot;
+    return [tokenBAmount, slot_id];
 }
