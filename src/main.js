@@ -94,7 +94,7 @@ async function calcAmountAndSwap(
     for (;;) {
         try {
             if (retry_count > 0) {
-                const tokenAAccount = await cache.getTokenAccountBySymbol(tokenA);
+                const tokenAAccount = cache.getTokenAccountBySymbol(tokenA);
                 if (await getTokenAccountBalance(connection, tokenAAccount, slot_id) < tokenAAmount) {
                     break;
                 }
@@ -154,7 +154,7 @@ async function Main() {
     const amounts = await getHoldingAmounts(connection, usdc_wusdt);
     console.log(amounts);
     */
-    let usdc_account = await cache.getTokenAccountBySymbol("USDC");
+    let usdc_account = cache.getTokenAccountBySymbol("USDC");
     let usdc_balance;
     let slot_id = 0;
     const reserved_sol_balance = 10000000;
@@ -164,16 +164,16 @@ async function Main() {
         for (;;) {
             try {
                 let usdcPairs = await Promise.all(tokenSymbols.map(async (item) => {
-                    const pool = await cache.getSwapPoolBySymbol(item, "USDC");
+                    const pool = cache.getSwapPoolBySymbol(item, "USDC");
                     const [a, b] = await getHoldingAmounts(connection, pool);
                     return [`${item}/USDC`, [a, b]];
                 }));
                 let wusdtPairs = await Promise.all(tokenSymbols.map(async (item) => {
-                    const pool = await cache.getSwapPoolBySymbol(item, "wUSDT");
+                    const pool = cache.getSwapPoolBySymbol(item, "wUSDT");
                     const amounts = await getHoldingAmounts(connection, pool);
                     return [`${item}/wUSDT`, amounts];
                 }));
-                wusdtPairs.push(["USDC/wUSDT", await getHoldingAmounts(connection, await cache.getSwapPoolBySymbol("USDC", "wUSDT"))]);
+                wusdtPairs.push(["USDC/wUSDT", await getHoldingAmounts(connection, cache.getSwapPoolBySymbol("USDC", "wUSDT"))]);
                 tradePairs = new Map(usdcPairs.concat(wusdtPairs));
                 break;
             } catch (e) {

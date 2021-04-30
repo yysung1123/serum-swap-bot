@@ -308,11 +308,11 @@ export const cache = {
         tokenNamesCache = await getTokenNames(connection);
         swapPoolsCache = await getSwapPools(connection);
     },
-    getTokenAccountBySymbol: async (symbol) => {
+    getTokenAccountBySymbol: (symbol) => {
         let account = tokenAccountsCache.get(symbol);
         return account;
     },
-    getTokenMintBySymbol: async (symbol) => {
+    getTokenMintBySymbol: (symbol) => {
         let token = tokenMintsCache.get(symbol);
         return token;
     },
@@ -320,7 +320,7 @@ export const cache = {
         let name = tokenNamesCache.get(publicKey.toString());
         return name;
     },
-    getSwapPoolBySymbol: async (symbolA, symbolB) => {
+    getSwapPoolBySymbol: (symbolA, symbolB) => {
         let swapPool = swapPoolsCache.get(`${symbolA}/${symbolB}`);
         return swapPool;
     },
