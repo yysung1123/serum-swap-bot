@@ -80,7 +80,7 @@ export const swap = async (
         [queryMintAName, queryMintBName] = [mintAName, mintBName];
     }
     console.log(mintAName, mintBName);
-    const pool = await cache.getSwapPoolBySymbol(queryMintAName, queryMintBName);
+    const pool = cache.getSwapPoolBySymbol(queryMintAName, queryMintBName);
 
     const minAmountOut = Math.floor(amountOut * SLIPPAGE);
     const holdingA = !reverse ? pool.pubkeys.holdingAccounts[0] : pool.pubkeys.holdingAccounts[1];
