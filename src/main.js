@@ -90,8 +90,19 @@ async function calcAmountAndSwap(
     if (rev) {
         [tokenA, tokenB] = [tokenB, tokenA];
     }
+    let retry_count = 0;
     for (;;) {
         try {
+            if (retry_count > 0) {
+                const tokenAAccount = cache.getTokenAccountBySymbol(tokenA);
+                let currentTokenAAmount;
+                [currentTokenAAmount, slot_id] = await getTokenAccountBalance(connection, tokenAAccount, slot_id)
+                if (currentTokenAAmount < tokenAAmount) {
+                    const tokenBAccount = cache.getTokenAccountBySymbol(tokenB);
+                    [tokenBAmount, slot_id] = await getTokenAccountBalance(connection, tokenBAccount, slot_id);
+                    break;
+                }
+            }
             const tokenBExpectationAmount = caculateProfit(tokenAAmount, (!rev ? [pair] : [amountSwap(pair)]));
             [tokenBAmount, slot_id] = await swap(connection, owner, tokenAAmount, tokenBExpectationAmount, 0.9, tokenA, tokenB);
             break;

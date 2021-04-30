@@ -31,7 +31,7 @@ async function confirmTransaction(
             break;
         }
 
-        await delay(100);
+        await delay(MS_PER_SLOT);
         statusResponse = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
     }
 
