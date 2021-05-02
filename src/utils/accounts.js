@@ -156,7 +156,7 @@ async function getTokenNames(connection) {
     }));
 }
 
-async function getSwapPools(connection) {
+async function getSwapPools(connection, rateLimiter) {
     // https://github.com/project-serum/oyster-swap/blob/cff4858523b77a7a9ee105a135b6dee6bbcb4634/src/utils/pools.tsx#L482
     const queryPools = async (swapId, isLegacy = false) => {
         let poolsArray = [];
@@ -239,7 +239,7 @@ async function getSwapPools(connection) {
         return [poolName, pool]
     }).filter(item => !item[0].includes('undefined'));
     let pairsWithAmount = await Promise.all(pairs.map(async (item) => {
-        const [a, b] = await getHoldingAmounts(connection, item[1]);
+        const [a, b] = await getHoldingAmounts(connection, rateLimiter, item[1]);
         return [...item, a * b];
     }));
     let m = new Map();
@@ -254,7 +254,7 @@ async function getSwapPools(connection) {
             m.set(item[0], item[1]);
             mAmount[item[0]] = item[2];
         }
-    };
+    }
     return m;
 }
 
@@ -298,7 +298,7 @@ export const tokenSymbols = ["ETH", "LINK", "SUSHI", "SRM", "FRONT", "YFI", "FTT
 export const stableCoinSymbols = ["USDC", "wUSDT"];
 
 export const cache = {
-    initCaches: async (connection, publicKey) => {
+    initCaches: async (connection, rateLimiter, publicKey) => {
         tokenAccountsCache.clear();
         tokenMintsCache.clear();
         tokenNamesCache.clear();
@@ -306,7 +306,7 @@ export const cache = {
         tokenAccountsCache = await getAccounts(connection, publicKey);
         tokenMintsCache = await getTokens(connection);
         tokenNamesCache = await getTokenNames(connection);
-        swapPoolsCache = await getSwapPools(connection);
+        swapPoolsCache = await getSwapPools(connection, rateLimiter);
     },
     getTokenAccountBySymbol: (symbol) => {
         let account = tokenAccountsCache.get(symbol);

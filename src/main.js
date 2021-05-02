@@ -16,6 +16,8 @@ import { swap, getHoldingAmounts } from './utils/pools.js';
 
 import { delay } from './utils/delay.js';
 
+import { RateLimiter } from './utils/ratelimiter.js';
+
 require('dotenv').config();
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -27,6 +29,7 @@ const tokenAmount = parseInt(process.env.USDC_AMOUNT) * 1000000;
 const minimumProfit = parseFloat(process.env.MINIMUM_PROFIT);
 
 const connection = new Connection(url);
+const rateLimiter = new RateLimiter(100, 10);
 
 const owner = getAccountFromMnemonic(mnemonic);
 
@@ -136,7 +139,7 @@ async function Main() {
     setProgramIds(env)
     for (;;) {
         try {
-            await cache.initCaches(connection, owner.publicKey);
+            await cache.initCaches(connection, rateLimiter, owner.publicKey);
             break;
         } catch (e) {
             console.log(e);
@@ -169,15 +172,15 @@ async function Main() {
             try {
                 let usdcPairs = await Promise.all(tokenSymbols.map(async (item) => {
                     const pool = cache.getSwapPoolBySymbol(item, "USDC");
-                    const [a, b] = await getHoldingAmounts(connection, pool);
-                    return [`${item}/USDC`, [a, b]];
+                    const amounts = await getHoldingAmounts(connection, rateLimiter, pool);
+                    return [`${item}/USDC`, amounts];
                 }));
                 let wusdtPairs = await Promise.all(tokenSymbols.map(async (item) => {
                     const pool = cache.getSwapPoolBySymbol(item, "wUSDT");
-                    const amounts = await getHoldingAmounts(connection, pool);
+                    const amounts = await getHoldingAmounts(connection, rateLimiter, pool);
                     return [`${item}/wUSDT`, amounts];
                 }));
-                wusdtPairs.push(["USDC/wUSDT", await getHoldingAmounts(connection, cache.getSwapPoolBySymbol("USDC", "wUSDT"))]);
+                wusdtPairs.push(["USDC/wUSDT", await getHoldingAmounts(connection, rateLimiter, cache.getSwapPoolBySymbol("USDC", "wUSDT"))]);
                 tradePairs = new Map(usdcPairs.concat(wusdtPairs));
                 break;
             } catch (e) {

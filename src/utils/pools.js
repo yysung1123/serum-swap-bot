@@ -14,6 +14,7 @@ import {
 import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getOrCreateAssociatedAccountInfo } from '@solana/spl-token';
 
 import { delay } from './delay.js';
+import { RateLimiter } from './ratelimiter.js';
 
 export const isLatest = (swap) => {
     return swap.data.length === TokenSwapLayout.span;
@@ -21,9 +22,12 @@ export const isLatest = (swap) => {
 
 export const getHoldingAmounts = async (
     connection,
+    rateLimiter,
     pool,
 ) => {
+    await rateLimiter.wait();
     const holdingA = parseInt((await connection.getTokenAccountBalance(pool.pubkeys.holdingAccounts[0], 'processed')).value.amount);
+    await rateLimiter.wait();
     const holdingB = parseInt((await connection.getTokenAccountBalance(pool.pubkeys.holdingAccounts[1], 'processed')).value.amount);
     return [holdingA, holdingB];
 }
