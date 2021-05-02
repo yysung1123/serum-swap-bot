@@ -49,7 +49,7 @@ export const sendTransaction = async (
     let transaction = new Transaction();
     instructions.forEach((instruction) => transaction.add(instruction));
     transaction.recentBlockhash = (
-        await connection.getRecentBlockhash("max")
+        await connection.getRecentBlockhash("finalized")
     ).blockhash;
     transaction.sign(wallet);
     if (signers.length > 0) {
