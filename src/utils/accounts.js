@@ -19,6 +19,7 @@ import { programIds } from './ids.js';
 import { TokenSwapLayout, TokenSwapLayoutLegacyV0 as TokenSwapLayoutV0, TokenSwapLayoutV1 } from './tokenSwap.js';
 
 import { getHoldingAmounts } from './pools.js';
+import { delay } from './delay.js';
 
 // https://github.com/project-serum/spl-token-wallet/blob/ce8e8cc71bd0a5f48606cc25bc88683ad5421b28/src/utils/tokens/data.js#L4
 export const ACCOUNT_LAYOUT = BufferLayout.struct([
@@ -158,8 +159,9 @@ async function getTokenNames(connection) {
 
 async function getSwapPools(connection, rateLimiter) {
     // https://github.com/project-serum/oyster-swap/blob/cff4858523b77a7a9ee105a135b6dee6bbcb4634/src/utils/pools.tsx#L482
-    const queryPools = async (swapId, isLegacy = false) => {
+    const queryPools = async (swapId, rateLimiter, isLegacy = false) => {
         let poolsArray = [];
+        await rateLimiter.wait();
         (await connection.getProgramAccounts(swapId))
             .filter(
                 (item) =>
@@ -229,8 +231,8 @@ async function getSwapPools(connection, rateLimiter) {
     };
 
     let pools = await Promise.all([
-        queryPools(programIds().swap),
-        ...programIds().swap_legacy.map((leg) => queryPools(leg, true)),
+        queryPools(programIds().swap, rateLimiter),
+        ...programIds().swap_legacy.map((leg) => queryPools(leg, rateLimiter, true)),
     ])
     let pairs = pools[0].map((pool) => {
         const mintAName = cache.getTokenNameByPublicKey(pool.pubkeys.holdingMints[0]);
@@ -239,7 +241,14 @@ async function getSwapPools(connection, rateLimiter) {
         return [poolName, pool]
     }).filter(item => !item[0].includes('undefined'));
     let pairsWithAmount = await Promise.all(pairs.map(async (item) => {
-        const [a, b] = await getHoldingAmounts(connection, rateLimiter, item[1]);
+        let a, b;
+        for (;;) {
+            try {
+                [a, b] = await getHoldingAmounts(connection, rateLimiter, item[1]);
+                break;
+            } catch (e) {
+            }
+        }
         return [...item, a * b];
     }));
     let m = new Map();
@@ -304,9 +313,13 @@ export const cache = {
         tokenNamesCache.clear();
         swapPoolsCache.clear();
         tokenAccountsCache = await getAccounts(connection, publicKey);
+        await delay(5000);
         tokenMintsCache = await getTokens(connection);
+        await delay(5000);
         tokenNamesCache = await getTokenNames(connection);
+        await delay(10000);
         swapPoolsCache = await getSwapPools(connection, rateLimiter);
+        await delay(10000);
     },
     getTokenAccountBySymbol: (symbol) => {
         let account = tokenAccountsCache.get(symbol);

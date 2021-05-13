@@ -12,14 +12,12 @@ export class RateLimiter {
 
     async wait() {
         let now = Date.now();
-        while (this._slidingWindow.length > 0 && now - this._slidingWindow[0] > this._interval * 1000) {
-            this._slidingWindow.shift();
-        }
-        if (this._slidingWindow.length >= this._numRequests) {
+        while (this._slidingWindow.length >= this._numRequests) {
             if (now - this._slidingWindow[0] <= this._interval * 1000) {
                 await delay(this._interval * 1000 - (now - this._slidingWindow[0]));
-                this._slidingWindow.shift();
                 now = Date.now();
+            } else {
+                this._slidingWindow.shift();
             }
         }
         this._slidingWindow.push(now);

@@ -14,7 +14,6 @@ import {
 import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getOrCreateAssociatedAccountInfo } from '@solana/spl-token';
 
 import { delay } from './delay.js';
-import { RateLimiter } from './ratelimiter.js';
 
 export const isLatest = (swap) => {
     return swap.data.length === TokenSwapLayout.span;
