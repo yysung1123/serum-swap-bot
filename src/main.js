@@ -18,9 +18,17 @@ import { delay } from './utils/delay.js';
 
 import { RateLimiter } from './utils/ratelimiter.js';
 
+import { getMultipleAccounts } from './utils/web3.js'
+
+import { ACCOUNT_LAYOUT } from './utils/layouts.js'
+
+import { chunk } from 'lodash'
+
 require('dotenv').config();
 
 const TelegramBot = require('node-telegram-bot-api');
+
+const zip = (a, b) => a.map((k, i) => [k, b[i]]);
 
 const env = 'mainnet-beta';
 const url = 'https://api.mainnet-beta.solana.com';
@@ -29,7 +37,7 @@ const tokenAmount = parseInt(process.env.USDC_AMOUNT) * 1000000;
 const minimumProfit = parseFloat(process.env.MINIMUM_PROFIT);
 
 const connection = new Connection(url);
-const rateLimiter = new RateLimiter(100, 10);
+const rateLimiter = new RateLimiter(40, 10);
 
 const owner = getAccountFromMnemonic(mnemonic);
 
@@ -167,26 +175,31 @@ async function Main() {
     const reserved_sol_balance = 10000000;
 
     while (true) {
-        let tradePairs;
+        let usdcPairs = tokenSymbols.map((item) => [item, "USDC"])
+        let wusdtPairs = tokenSymbols.concat(["USDC"]).map((item) => [item, "wUSDT"])
+        const publicKeys = usdcPairs.concat(wusdtPairs).flatMap(([tokenA, tokenB]) => {
+            const pool = cache.getSwapPoolBySymbol(tokenA, tokenB)
+            return pool.pubkeys.holdingAccounts
+        })
+        let swapPoolRes
         for (;;) {
             try {
-                let usdcPairs = await Promise.all(tokenSymbols.map(async (item) => {
-                    const pool = cache.getSwapPoolBySymbol(item, "USDC");
-                    const amounts = await getHoldingAmounts(connection, rateLimiter, pool);
-                    return [`${item}/USDC`, amounts];
-                }));
-                let wusdtPairs = await Promise.all(tokenSymbols.map(async (item) => {
-                    const pool = cache.getSwapPoolBySymbol(item, "wUSDT");
-                    const amounts = await getHoldingAmounts(connection, rateLimiter, pool);
-                    return [`${item}/wUSDT`, amounts];
-                }));
-                wusdtPairs.push(["USDC/wUSDT", await getHoldingAmounts(connection, rateLimiter, cache.getSwapPoolBySymbol("USDC", "wUSDT"))]);
-                tradePairs = new Map(usdcPairs.concat(wusdtPairs));
+                swapPoolRes = await getMultipleAccounts(connection, publicKeys, 'processed')
                 break;
             } catch (e) {
-                // console.log(e);
+
             }
         }
+        const tradePairs = new Map(zip(usdcPairs.concat(wusdtPairs), chunk(swapPoolRes, 2))
+            .map(([[tokenA, tokenB], [tokenAAccount, tokenBAccount]]) => {
+                let parsed
+                parsed = ACCOUNT_LAYOUT.decode(tokenAAccount.account.data)
+                const tokenAAmount = parseInt(parsed.amount.toString())
+                parsed = ACCOUNT_LAYOUT.decode(tokenBAccount.account.data)
+                const tokenBAmount = parseInt(parsed.amount.toString())
+                const amounts = [tokenAAmount, tokenBAmount]
+                return [`${tokenA}/${tokenB}`, amounts]
+            }))
         let profit = [];
         for (let token of tokenSymbols) {
             // usdc -> wusdt -> token -> usdc;
@@ -203,6 +216,7 @@ async function Main() {
             amounts.push(amountSwap(tradePairs.get("USDC/wUSDT")));
             profit.push([token, true, caculateProfit(tokenAmount, amounts)]);
         }
+        console.log(profit)
         const maxProfit = profit.reduce(function(prev, current) {
             return (prev[2] > current[2]) ? prev : current
         })
