@@ -1,25 +1,14 @@
 import * as BufferLayout from 'buffer-layout';
 
-import {
-    Account,
-    Connection,
-    PublicKey,
-    SystemProgram,
-    Transaction,
-} from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 
 import bs58 from 'bs58';
 
-import { TokenListProvider, TokenInfo } from '@solana/spl-token-registry';
+import { TokenListProvider } from '@solana/spl-token-registry';
 
-import { AccountLayout, Token, TOKEN_PROGRAM_ID, MintLayout, u64 } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, MintLayout, u64 } from '@solana/spl-token';
 
-import { programIds } from './ids.js';
-
-import { TokenSwapLayout, TokenSwapLayoutLegacyV0 as TokenSwapLayoutV0, TokenSwapLayoutV1 } from './tokenSwap.js';
-
-import { getHoldingAmounts } from './pools.js';
-import { delay } from './delay.js';
+import serumSwap from './serumSwap.json';
 
 // https://github.com/project-serum/spl-token-wallet/blob/ce8e8cc71bd0a5f48606cc25bc88683ad5421b28/src/utils/tokens/data.js#L4
 export const ACCOUNT_LAYOUT = BufferLayout.struct([
@@ -101,24 +90,6 @@ async function getOwnedTokenAccounts(connection, publicKey) {
         });
 }
 
-// https://github.com/project-serum/oyster-swap/blob/cff4858523b77a7a9ee105a135b6dee6bbcb4634/src/utils/pools.tsx#L457
-const toPoolInfo = (item, program, toMerge) => {
-    const mint = new PublicKey(item.data.tokenPool);
-    return {
-        pubkeys: {
-            account: item.pubkey,
-            program: program,
-            mint,
-            holdingMints: [],
-            holdingAccounts: [item.data.tokenAccountA, item.data.tokenAccountB].map(
-                (a) => new PublicKey(a)
-            ),
-        },
-        legacy: false,
-        raw: item,
-    };
-};
-
 let tokenAccountsCache = new Map();
 let tokenMintsCache = new Map();
 let tokenNamesCache = new Map();
@@ -142,130 +113,6 @@ async function getAccounts(connection, publicKey) {
     m.set("SOL", publicKey);
     return m;
 };
-
-async function getTokens(connection, publicKey) {
-    let tokenList = (await new TokenListProvider().resolve()).filterByClusterSlug('mainnet-beta').getList();
-    return new Map(tokenList.filter(item => item['name'] != "Tether USD (Wormhole)").map(({ symbol, address }) => {
-        return [symbol, new Token(connection, new PublicKey(address), TOKEN_PROGRAM_ID, null)];
-    }));
-};
-
-async function getTokenNames(connection) {
-    let tokens = await getTokens();
-    return new Map(Array.from(tokens).map(([symbol, token]) => {
-        return [token.publicKey.toString(), symbol];
-    }));
-}
-
-async function getSwapPools(connection, rateLimiter) {
-    // https://github.com/project-serum/oyster-swap/blob/cff4858523b77a7a9ee105a135b6dee6bbcb4634/src/utils/pools.tsx#L482
-    const queryPools = async (swapId, rateLimiter, isLegacy = false) => {
-        let poolsArray = [];
-        await rateLimiter.wait();
-        (await connection.getProgramAccounts(swapId))
-            .filter(
-                (item) =>
-                    item.account.data.length === TokenSwapLayout.span ||
-                    item.account.data.length === TokenSwapLayoutV1.span ||
-                    item.account.data.length === TokenSwapLayoutV0.span
-            )
-            .map((item) => {
-                let result = {
-                    data: undefined,
-                    account: item.account,
-                    pubkey: item.pubkey,
-                    init: async () => { },
-                };
-
-                const layout =
-                    item.account.data.length === TokenSwapLayout.span
-                        ? TokenSwapLayout
-                        : item.account.data.length === TokenSwapLayoutV1.span
-                            ? TokenSwapLayoutV1
-                            : TokenSwapLayoutV0;
-
-                // handling of legacy layout can be removed soon...
-                if (layout === TokenSwapLayoutV0) {
-                    result.data = layout.decode(item.account.data);
-                    let pool = toPoolInfo(result, swapId);
-                    pool.legacy = isLegacy;
-                    poolsArray.push(pool);
-
-                    result.init = async () => {
-                        try {
-                            // TODO: this is not great
-                            // Ideally SwapLayout stores hash of all the mints to make finding of pool for a pair easier
-                            const holdings = await Promise.all(
-                                getHoldings(connection, [
-                                    result.data.tokenAccountA,
-                                    result.data.tokenAccountB,
-                                ])
-                            );
-
-                            pool.pubkeys.holdingMints = [
-                                holdings[0].info.mint,
-                                holdings[1].info.mint,
-                            ];
-                        } catch (err) {
-                            console.log(err);
-                        }
-                    };
-                } else {
-                    result.data = layout.decode(item.account.data);
-
-                    let pool = toPoolInfo(result, swapId);
-                    pool.legacy = isLegacy;
-                    pool.pubkeys.feeAccount = new PublicKey(result.data.feeAccount);
-                    pool.pubkeys.holdingMints = [
-                        new PublicKey(result.data.mintA),
-                        new PublicKey(result.data.mintB),
-                    ];
-
-                    poolsArray.push(pool);
-                }
-
-                return result;
-            });
-
-        return poolsArray;
-    };
-
-    let pools = await Promise.all([
-        queryPools(programIds().swap, rateLimiter),
-        ...programIds().swap_legacy.map((leg) => queryPools(leg, rateLimiter, true)),
-    ])
-    let pairs = pools[0].map((pool) => {
-        const mintAName = cache.getTokenNameByPublicKey(pool.pubkeys.holdingMints[0]);
-        const mintBName = cache.getTokenNameByPublicKey(pool.pubkeys.holdingMints[1]);
-        const poolName = `${mintAName}/${mintBName}`;
-        return [poolName, pool]
-    }).filter(item => !item[0].includes('undefined'));
-    let pairsWithAmount = await Promise.all(pairs.map(async (item) => {
-        let a, b;
-        for (;;) {
-            try {
-                [a, b] = await getHoldingAmounts(connection, rateLimiter, item[1]);
-                break;
-            } catch (e) {
-            }
-        }
-        return [...item, a * b];
-    }));
-    let m = new Map();
-    let mAmount = new Map();
-    for (let item of pairsWithAmount) {
-        if (m.has(item[0])) {
-            if (mAmount[item[0]] < item[2]) {
-                m.set(item[0], item[1]);
-                mAmount[item[0]] = item[2];
-            }
-        } else {
-            m.set(item[0], item[1]);
-            mAmount[item[0]] = item[2];
-        }
-    }
-    return m;
-}
 
 const deserializeMint = (data) => {
     if (data.length !== MintLayout.span) {
@@ -307,19 +154,29 @@ export const tokenSymbols = ["ETH", "LINK", "SUSHI", "SRM", "FRONT", "YFI", "FTT
 export const stableCoinSymbols = ["USDC", "wUSDT"];
 
 export const cache = {
-    initCaches: async (connection, rateLimiter, publicKey) => {
+    initCaches: async (connection, publicKey) => {
         tokenAccountsCache.clear();
-        tokenMintsCache.clear();
         tokenNamesCache.clear();
         swapPoolsCache.clear();
         tokenAccountsCache = await getAccounts(connection, publicKey);
-        await delay(5000);
-        tokenMintsCache = await getTokens(connection);
-        await delay(5000);
-        tokenNamesCache = await getTokenNames(connection);
-        await delay(10000);
-        swapPoolsCache = await getSwapPools(connection, rateLimiter);
-        await delay(10000);
+        tokenNamesCache = new Map(Object.entries(serumSwap['tokenNames']));
+        swapPoolsCache = new Map(Object.keys(serumSwap['swapPools']).map((key) => {
+            const item = serumSwap['swapPools'][key];
+            return [key,
+                {
+                    'pubkeys': {
+                        'account': new PublicKey(item.pubkeys.account),
+                        'holdingAccounts': [
+                            new PublicKey(item.pubkeys.holdingAccounts[0].toString()),
+                            new PublicKey(item.pubkeys.holdingAccounts[1].toString()),
+                        ],
+                        'mint': new PublicKey(item.pubkeys.mint.toString()),
+                        'feeAccount': new PublicKey(item.pubkeys.feeAccount.toString()),
+                        'program': new PublicKey(item.pubkeys.program.toString()),
+                    }
+                }
+            ]
+        }));
     },
     getTokenAccountBySymbol: (symbol) => {
         let account = tokenAccountsCache.get(symbol);

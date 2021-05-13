@@ -1,10 +1,4 @@
-import {
-    Account,
-    Connection,
-    PublicKey,
-    SystemProgram,
-    Transaction,
-} from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 
 import { getAccountFromMnemonic } from './utils/wallet.js'
 
@@ -12,11 +6,9 @@ import { cache, tokenSymbols } from './utils/accounts.js';
 
 import { setProgramIds } from './utils/ids.js';
 
-import { swap, getHoldingAmounts } from './utils/pools.js';
+import { swap } from './utils/pools.js';
 
 import { delay } from './utils/delay.js';
-
-import { RateLimiter } from './utils/ratelimiter.js';
 
 import { getMultipleAccounts } from './utils/web3.js'
 
@@ -37,7 +29,6 @@ const tokenAmount = parseInt(process.env.USDC_AMOUNT) * 1000000;
 const minimumProfit = parseFloat(process.env.MINIMUM_PROFIT);
 
 const connection = new Connection(url);
-const rateLimiter = new RateLimiter(40, 10);
 
 const owner = getAccountFromMnemonic(mnemonic);
 
@@ -147,7 +138,7 @@ async function Main() {
     setProgramIds(env)
     for (;;) {
         try {
-            await cache.initCaches(connection, rateLimiter, owner.publicKey);
+            await cache.initCaches(connection, owner.publicKey);
             break;
         } catch (e) {
             console.log(e);

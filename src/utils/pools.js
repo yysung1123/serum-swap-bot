@@ -6,30 +6,15 @@ import { sendTransaction } from './connection.js';
 
 import { programIds } from './ids.js';
 
-import {
-    Account,
-} from '@solana/web3.js';
+import { Account } from '@solana/web3.js';
 
-
-import { AccountLayout, Token, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getOrCreateAssociatedAccountInfo } from '@solana/spl-token';
+import { Token } from '@solana/spl-token';
 
 import { delay } from './delay.js';
 
 export const isLatest = (swap) => {
     return swap.data.length === TokenSwapLayout.span;
 };
-
-export const getHoldingAmounts = async (
-    connection,
-    rateLimiter,
-    pool,
-) => {
-    await rateLimiter.wait();
-    const holdingA = parseInt((await connection.getTokenAccountBalance(pool.pubkeys.holdingAccounts[0], 'processed')).value.amount);
-    await rateLimiter.wait();
-    const holdingB = parseInt((await connection.getTokenAccountBalance(pool.pubkeys.holdingAccounts[1], 'processed')).value.amount);
-    return [holdingA, holdingB];
-}
 
 function approveAmount(
     instructions,
@@ -101,7 +86,7 @@ export const swap = async (
     const fromAccount = await cache.getTokenAccountBySymbol(mintAName);
     const toAccount = await cache.getTokenAccountBySymbol(mintBName);
 
-    const isLatestSwap = isLatest(pool.raw.account);
+    const isLatestSwap = true;
     const transferAuthority = approveAmount(
         instructions,
         cleanupInstructions,
