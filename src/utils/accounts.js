@@ -110,7 +110,6 @@ async function getAccounts(connection, publicKey) {
         let symbol = tokenList.find(t => t.address === parsed.mint.toBase58())?.symbol;
         return [symbol, publicKey];
     }));
-    m.set("SOL", publicKey);
     return m;
 };
 
@@ -150,7 +149,7 @@ const getMintInfo = async (connection, pubKey) => {
     return deserializeMint(data);
 };
 
-export const tokenSymbols = ["ETH", "LINK", "SUSHI", "SRM", "FRONT", "YFI", "FTT", "BTC", "TOMO"];
+export const tokenSymbols = ["ETH", "LINK", "SUSHI", "SRM", "FRONT", "YFI", "FTT", "BTC", "TOMO", "SOL"];
 export const stableCoinSymbols = ["USDC", "wUSDT"];
 
 export const cache = {
