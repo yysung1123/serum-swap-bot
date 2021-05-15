@@ -4,8 +4,6 @@ import {
 
 import { delay } from './delay.js'
 
-const MS_PER_SLOT = 400;
-
 async function confirmTransaction(
     connection,
     signature,
@@ -31,7 +29,7 @@ async function confirmTransaction(
             break;
         }
 
-        await delay(MS_PER_SLOT);
+        await delay(200);
         statusResponse = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
     }
 
@@ -69,7 +67,7 @@ export const sendTransaction = async (
         let res, status, status_null_count = 0;
         for (;;) {
             try {
-                res = await confirmTransaction(connection, txid, 2);
+                res = await confirmTransaction(connection, txid, 1);
                 status = res.value;
                 if (status === null && status_null_count < 2) {
                     console.log(`status null ${status_null_count}`);

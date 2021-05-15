@@ -110,7 +110,7 @@ async function calcAmountAndSwap(
             break;
         } catch (e) {
             console.log(e);
-            await delay(400);
+            await delay(200);
         }
         retry_count += 1;
     }
@@ -161,8 +161,7 @@ async function Main() {
     console.log(amounts);
     */
     let usdc_account = cache.getTokenAccountBySymbol("USDC");
-    let usdc_balance;
-    let slot_id = 0;
+    let [usdc_balance, slot_id] = await getTokenAccountBalance(connection, usdc_account, 0);
     const reserved_sol_balance = 10000000;
 
     while (true) {
@@ -207,14 +206,12 @@ async function Main() {
             amounts.push(amountSwap(tradePairs.get("USDC/wUSDT")));
             profit.push([token, true, caculateProfit(tokenAmount, amounts)]);
         }
-        console.log(profit)
         const maxProfit = profit.reduce(function(prev, current) {
             return (prev[2] > current[2]) ? prev : current
         })
         if (maxProfit[2] > tokenAmount * minimumProfit) {
             console.log(maxProfit);
             console.log(new Date().toLocaleString());
-            [usdc_balance, slot_id] = await getTokenAccountBalance(connection, usdc_account, slot_id);
             console.log(usdc_balance);
             sendMessage(bot, chatId, `${maxProfit}\n${usdc_balance / 1000000}`);
             let swappedAmount;

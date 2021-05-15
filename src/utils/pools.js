@@ -137,7 +137,7 @@ export const swap = async (
             }
         } catch (e) {
         }
-        await delay(400);
+        await delay(200);
     }
 
     const tokenBAmount = parseInt(res.meta.postTokenBalances[3].uiTokenAmount.amount);
