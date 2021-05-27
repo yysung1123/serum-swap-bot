@@ -29,7 +29,7 @@ async function confirmTransaction(
             break;
         }
 
-        await delay(200);
+        await delay(100);
         statusResponse = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
     }
 
@@ -61,6 +61,17 @@ export const sendTransaction = async (
     };
 
     const txid = await connection.sendRawTransaction(rawTransaction, options);
+    /*
+    transaction.feePayer = wallet.publicKey;
+    signers.push(wallet);
+    let options = {
+        skipPreflight: true,
+        commitment: "confirmed",
+    };
+
+    const txid = await connection.sendTransaction(transaction, signers, options);
+    */
+
 
     if (awaitConfirmation) {
         //await connection.getConfirmedTransaction(txid, options && options.commitment);
@@ -69,7 +80,7 @@ export const sendTransaction = async (
             try {
                 res = await confirmTransaction(connection, txid, 1);
                 status = res.value;
-                if (status === null && status_null_count < 2) {
+                if (status === null && status_null_count < 1) {
                     console.log(`status null ${status_null_count}`);
                     status_null_count += 1;
                     continue;

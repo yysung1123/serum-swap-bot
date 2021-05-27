@@ -23,7 +23,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const zip = (a, b) => a.map((k, i) => [k, b[i]]);
 
 const env = 'mainnet-beta';
-const url = 'https://api.mainnet-beta.solana.com';
+const url_mainnet = 'https://api.mainnet-beta.solana.com';
+const url = 'http://10.140.0.6:8899';
 const mnemonic = process.env.MNEMONIC;
 const tokenAmount = parseInt(process.env.USDC_AMOUNT) * 1000000;
 const minimumProfit = parseFloat(process.env.MINIMUM_PROFIT);
@@ -71,7 +72,7 @@ async function getTokenAccountBalance(
             }
         }
         process.stdout.write(`${amount} ${current_slot_id} ${slot_id}\r`);
-        await delay(400);
+        await delay(100);
     }
     console.log(amount);
     return [amount, current_slot_id];
@@ -110,7 +111,7 @@ async function calcAmountAndSwap(
             break;
         } catch (e) {
             console.log(e);
-            await delay(200);
+            await delay(100);
         }
         retry_count += 1;
     }
@@ -138,7 +139,8 @@ async function Main() {
     setProgramIds(env)
     for (;;) {
         try {
-            await cache.initCaches(connection, owner.publicKey);
+            const conn = new Connection(url_mainnet);
+            await cache.initCaches(conn, owner.publicKey);
             break;
         } catch (e) {
             console.log(e);
